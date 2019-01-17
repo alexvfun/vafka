@@ -9,6 +9,7 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
+//Message producer for tests
 func produce(CleanTargets []string) string {
 	var resp string
 	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost"})
