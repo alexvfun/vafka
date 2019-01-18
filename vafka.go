@@ -1,13 +1,15 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
+	"flag"
 	"log"
 	"net/http"
+	"vafka/pkg"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
+
+var myVarnisConf vardsc.VarnishConf
 
 //Message producer for tests
 func produce(CleanTargets []string) string {
@@ -51,6 +53,9 @@ func produce(CleanTargets []string) string {
 
 //KConsumer - kafka consumer implementation
 func consume() {
+	myVarnish := new(vardsc.VarnishCluster)
+	myVarnish.New(myVarnisConf)
+
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": "localhost",
 		"group.id":          "myGroup",
@@ -67,7 +72,7 @@ func consume() {
 		msg, err := c.ReadMessage(-1)
 		if err == nil {
 			log.Println("Got message - ", string(msg.Value))
-			ok := sendPurge(string(msg.Value))
+			ok := myVarnish.Purge(string(msg.Value))
 			if ok != nil {
 				log.Printf("Purge error %v\n", ok)
 			}
@@ -80,52 +85,28 @@ func consume() {
 	c.Close()
 }
 
-//SendPurge - http purge for varnish
-func sendPurge(PurgeReq string) error {
-	log.Println("Got request and going to purge: ", PurgeReq)
-	// Create client
-	client := &http.Client{}
-
-	// Create request
-	req, err := http.NewRequest("PURGE", "http://"+PurgeReq, nil)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// Fetch Request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Read Response Body
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	log.Println("Got response from Varnish: \n", string(respBody))
-	return nil
-}
-
 func handler(w http.ResponseWriter, r *http.Request) {
 
 	if len(r.URL.Query().Get("host")) > 0 {
-		produce([]string{r.URL.Query().Get("host") + "/"})
-		fmt.Fprint(w, produce([]string{r.URL.Query().Get("host") + "/"}))
+		produce([]string{r.URL.Query().Get("host")})
+		//fmt.Fprint(w, produce([]string{r.URL.Query().Get("host")}))
 	}
 
 }
 
 func main() {
-	//produce([]string{"www.crunchit.io/index?kuku=1"})
+	// getting config parameters
+	vConfMethod := flag.String("vconfmethod", "conf", "Varnish topology configuration: default for fake, conf for config file, consul for consul based")
+	vConfFile := flag.String("vconffile", "/Users/alexeyfy/go/src/vafka/conf/varnish.yaml", "Varnish topology config file")
+	vHTTPPort := flag.String("httpport", "8080", "HTTP server port")
+
+	myVarnisConf.Method = *vConfMethod
+	myVarnisConf.ConfFile = *vConfFile
+
 	go func() {
 		consume()
 	}()
 
 	http.HandleFunc("/", handler)
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":"+*vHTTPPort, nil)
 }
