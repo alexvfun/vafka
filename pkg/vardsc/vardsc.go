@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -17,8 +18,9 @@ type VarnishConf struct {
 
 //VarnishCluster - cluster map and purge
 type VarnishCluster struct {
-	DC      string   `yaml:"DC"`
-	Servers []string `yaml:"Servers"`
+	DC      string        `yaml:"DC"`
+	Servers []string      `yaml:"Servers"`
+	TimeOut time.Duration `yaml:"TimeOut"`
 }
 
 func (vc *VarnishCluster) getYAMLConf(conf VarnishConf) *VarnishCluster {
@@ -52,25 +54,28 @@ func (vc *VarnishCluster) New(conf VarnishConf) *VarnishCluster {
 //Purge for specific url accross varnish cluster.
 func (vc *VarnishCluster) Purge(toClean string) error {
 	//var logmsg string
-	client := &http.Client{}
+	timeout := time.Duration(vc.TimeOut * time.Second)
+	client := &http.Client{Timeout: timeout}
 	req, _ := http.NewRequest("PURGE", "http://"+vc.Servers[0], nil)
 	req.Host = toClean
 	for _, server := range vc.Servers {
+		log.Println("Going to purge ", toClean, "from ", server)
 		req.URL, _ = url.Parse("http://" + server)
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Println(err)
-			return err
-		}
-		defer resp.Body.Close()
+			//return err
+		} else {
+			defer resp.Body.Close()
 
-		// Read Response Body
-		respBody, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Println(err)
-			return err
+			// Read Response Body
+			respBody, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Println(err)
+				//return err
+			}
+			log.Printf("Got response from Varnish: %s:\n\n,%s", server, string(respBody))
 		}
-		log.Printf("Got response from Varnish: %s:\n\n,%s", server, string(respBody))
 	}
 	return nil
 

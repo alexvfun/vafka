@@ -1,0 +1,5 @@
+DC: test
+Server: localhost
+Group: myGroup
+AutoOffsetReset: earliest
+Topic: CacheInvalidate

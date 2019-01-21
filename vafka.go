@@ -2,58 +2,21 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"net/http"
-	"vafka/pkg"
-
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"vafka/pkg/kacos"
+	"vafka/pkg/vardsc"
 )
 
 var myVarnisConf vardsc.VarnishConf
 
-//Message producer for tests
-func produce(CleanTargets []string) string {
-	var resp string
-	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost"})
-	if err != nil {
-		panic(err)
-	}
-
-	defer p.Close()
-
-	// Delivery report handler for produced messages
-	go func() {
-		for e := range p.Events() {
-			switch ev := e.(type) {
-			case *kafka.Message:
-				if ev.TopicPartition.Error != nil {
-					//log.Printf("Delivery failed: %v\n", ev.TopicPartition)
-					resp = "Delivery failed: "
-				} else {
-					//log.Printf("Delivered message to %v\n", ev.TopicPartition)
-					resp = "Delivered message"
-				}
-			}
-		}
-	}()
-
-	// Produce messages to topic (asynchronously)
-	topic := "CacheInvalidate"
-	for _, word := range CleanTargets {
-		p.Produce(&kafka.Message{
-			TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-			Value:          []byte(word),
-		}, nil)
-	}
-
-	// Wait for message deliveries before shutting down
-	p.Flush(15 * 1000)
-	return resp
-}
+var myKafka kacos.KafkaRunner
+var vKafkaFile *string
+var myVarnish vardsc.VarnishCluster
 
 //KConsumer - kafka consumer implementation
-func consume() {
-	myVarnish := new(vardsc.VarnishCluster)
+/*func consume() {
+	var myVarnish vardsc.VarnishCluster
 	myVarnish.New(myVarnisConf)
 
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
@@ -83,13 +46,14 @@ func consume() {
 	}
 
 	c.Close()
-}
+}*/
 
 func handler(w http.ResponseWriter, r *http.Request) {
 
+	//myKafka.New(*vKafkaFile)
 	if len(r.URL.Query().Get("host")) > 0 {
-		produce([]string{r.URL.Query().Get("host")})
-		//fmt.Fprint(w, produce([]string{r.URL.Query().Get("host")}))
+		//myKafka.Produce([]string{r.URL.Query().Get("host")})
+		fmt.Fprint(w, myKafka.Produce([]string{r.URL.Query().Get("host")}))
 	}
 
 }
@@ -99,12 +63,17 @@ func main() {
 	vConfMethod := flag.String("vconfmethod", "conf", "Varnish topology configuration: default for fake, conf for config file, consul for consul based")
 	vConfFile := flag.String("vconffile", "/Users/alexeyfy/go/src/vafka/conf/varnish.yaml", "Varnish topology config file")
 	vHTTPPort := flag.String("httpport", "8080", "HTTP server port")
-
+	vKafkaFile = flag.String("vkafkafile", "/Users/alexeyfy/go/src/vafka/conf/kafka.yaml", "Kafka config")
 	myVarnisConf.Method = *vConfMethod
 	myVarnisConf.ConfFile = *vConfFile
 
+	myVarnish.New(myVarnisConf)
+	
+	myKafka.NewKafkaRunner(*vKafkaFile)
+	myKafka.Produce([]string{"www.crunchit.io"})
 	go func() {
-		consume()
+		//consume()
+		myKafka.Consume(myVarnish)
 	}()
 
 	http.HandleFunc("/", handler)
