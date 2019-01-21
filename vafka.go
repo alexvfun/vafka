@@ -14,40 +14,6 @@ var myKafka kacos.KafkaRunner
 var vKafkaFile *string
 var myVarnish vardsc.VarnishCluster
 
-//KConsumer - kafka consumer implementation
-/*func consume() {
-	var myVarnish vardsc.VarnishCluster
-	myVarnish.New(myVarnisConf)
-
-	c, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": "localhost",
-		"group.id":          "myGroup",
-		"auto.offset.reset": "earliest",
-	})
-
-	if err != nil {
-		panic(err)
-	}
-
-	c.SubscribeTopics([]string{"CacheInvalidate", "^aRegex.*[Tt]opic"}, nil)
-
-	for {
-		msg, err := c.ReadMessage(-1)
-		if err == nil {
-			log.Println("Got message - ", string(msg.Value))
-			ok := myVarnish.Purge(string(msg.Value))
-			if ok != nil {
-				log.Printf("Purge error %v\n", ok)
-			}
-		} else {
-			// The client will automatically try to recover from all errors.
-			log.Printf("Consumer error: %v (%v)\n", err, msg)
-		}
-	}
-
-	c.Close()
-}*/
-
 func handler(w http.ResponseWriter, r *http.Request) {
 
 	//myKafka.New(*vKafkaFile)
@@ -68,7 +34,7 @@ func main() {
 	myVarnisConf.ConfFile = *vConfFile
 
 	myVarnish.New(myVarnisConf)
-	
+
 	myKafka.NewKafkaRunner(*vKafkaFile)
 	myKafka.Produce([]string{"www.crunchit.io"})
 	go func() {
